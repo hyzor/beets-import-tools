@@ -1,0 +1,7 @@
+# Ignore album folders — only track the scripts and docs
+/*
+!/README.md
+!/preprocess.sh
+!/import.sh
+!/clean.sh
+!/.gitignore
