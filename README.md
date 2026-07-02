@@ -16,8 +16,9 @@ Clone or copy these scripts into your beets import staging directory, then confi
 | Script | Purpose |
 |---|---|
 | `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames |
+| `embed-lrc.sh` | Embed existing `.lrc` sidecar lyrics into audio file tags for beets awareness |
 | `import.sh` | Runs `beet import .` — standard MusicBrainz-autotagged import |
-| `clean.sh` | Deletes everything except itself, `import.sh`, and `README.md` — run after successful import |
+| `clean.sh` | Deletes everything except scripts and `README.md` — run after successful import |
 
 ---
 
@@ -240,6 +241,29 @@ beet lyrics -l
 ```
 
 The `-p` flag is useful for checking what was found without needing to open the file tags.
+
+### Synced lyrics (with timestamps)
+
+Set `synced: true` and `keep_synced: true` in your config to prefer synced/timed lyrics (`[MM:SS.xx]` format) from LRCLib. This gives you timed lyrics that scroll in sync with the music in compatible players:
+
+```yaml
+lyrics:
+    synced: true       # Fetch synced lyrics when available
+    keep_synced: true  # Don't overwrite tracks that already have synced lyrics
+```
+
+### Importing existing .lrc sidecar files
+
+If you already have `.lrc` files sitting next to your audio files, use the `embed-lrc.sh` script to embed them into the file tags so beets knows about them too:
+
+```bash
+./embed-lrc.sh                    # Embed all .lrc files in the library
+./embed-lrc.sh --dry-run          # Preview only
+./embed-lrc.sh --force            # Overwrite existing lyrics tags with .lrc content
+./embed-lrc.sh /path/to/album/    # Specific folder only
+```
+
+This preserves the `[MM:SS.xx]` timestamps and then runs `beet update` to sync the database.
 
 ### Auto-fetch on import
 

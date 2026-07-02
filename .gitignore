@@ -2,6 +2,7 @@
 /*
 !/README.md
 !/preprocess.sh
+!/embed-lrc.sh
 !/import.sh
 !/clean.sh
 !/.gitignore
