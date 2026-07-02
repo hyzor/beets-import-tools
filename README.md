@@ -177,7 +177,73 @@ beet list -a '' ''          # Orphaned albums (empty artist/album)
 
 ---
 
-## Adding a new album
+## Lyrics
+
+The beets [lyrics](https://beets.io/plugins/lyrics/) plugin ships with beets and can fetch lyrics from multiple sources, then embed them directly into your audio files. It runs automatically during import and can be run against your existing library.
+
+### Setup
+
+Add `lyrics` to your beets plugins list and configure the sources you want to use:
+
+```yaml
+# ~/.config/beets/config.yaml
+plugins:
+    - musicbrainz
+    - lyrics
+
+lyrics:
+    auto: true     # Fetch lyrics automatically on import
+    force: false   # Don't re-fetch if lyrics already exist
+    synced: false  # Prefer synced/timed lyrics (LRC format)
+    sources:
+        - lrclib
+        - genius
+```
+
+### Dependencies
+
+The lyrics plugin needs `beautifulsoup4` and `requests` (which beets already depends on):
+
+```bash
+# Arch / CachyOS
+sudo pacman -S python-beautifulsoup4
+```
+
+### Available sources
+
+| Source | API key needed | Notes |
+|---|---|---|
+| `lrclib` | No | Best for synced lyrics, no registration required |
+| `genius` | Built-in | Ships with a bundled API key, works out of the box |
+| `google` | Yes | Requires Google Custom Search API key + engine ID |
+
+`musixmatch` and `tekstowo` are available in the plugin but disabled by default (they block requests from the beets user agent).
+
+### Usage
+
+```bash
+# Fetch lyrics for your entire library (skips tracks that already have them)
+beet lyrics
+
+# Fetch lyrics for a specific album or query
+beet lyrics album:"Moment Of Truth"
+beet lyrics -a "Artist Name"
+
+# Print lyrics to console (doesn't re-fetch)
+beet lyrics -p album:"Album"
+
+# Force re-download even if lyrics already exist
+beet lyrics -f
+
+# Only fetch for tracks missing lyrics (local mode)
+beet lyrics -l
+```
+
+The `-p` flag is useful for checking what was found without needing to open the file tags.
+
+### Auto-fetch on import
+
+With `auto: true` (default), the plugin automatically fetches and embeds lyrics for every track during `beet import`. No extra steps needed — just run your normal import workflow and lyrics get added alongside MusicBrainz metadata.
 
 ```
 cp -r /path/to/Album /path/to/import/
