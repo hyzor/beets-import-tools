@@ -1,6 +1,15 @@
-# 🎵 Beets Import Directory
+# 🎵 Beets Import Toolkit
 
-This folder is the staging area for importing music into the beets library at `/media/wdblue/share/Music/`.
+This is a set of scripts for preprocessing and importing music into a [beets](https://beets.io/) library. Place album folders in the staging directory, run the preprocessor to fix common issues, then import into beets.
+
+## Setup
+
+Clone or copy these scripts into your beets import staging directory, then configure your beets library path:
+
+```bash
+# Edit preprocess.sh and set IMPORT_DIR to your staging folder
+# Or just run the scripts from the directory they live in
+```
 
 ## Scripts
 
@@ -15,7 +24,7 @@ This folder is the staging area for importing music into the beets library at `/
 ## Full workflow
 
 ```bash
-cd /media/wdblue/share/import/
+cd /path/to/import/
 
 # 1. Place album folder(s) here, e.g.:
 #    Artist - Album Name/
@@ -33,7 +42,7 @@ cd /media/wdblue/share/import/
 ### Quick import (when you know files are clean)
 
 ```bash
-cd /media/wdblue/share/import/
+cd /path/to/import/
 ./import.sh
 ./clean.sh
 ```
@@ -52,7 +61,7 @@ The `-A` flag (as-is) skips MusicBrainz lookup and uses whatever metadata the fi
 
 ## Folder naming requirements
 
-Beets expects album folders in `/media/wdblue/share/import/` following this pattern:
+Beets expects album folders following this pattern:
 
 ```
 Artist Name - Album Title/
@@ -115,7 +124,7 @@ This detects and re-wraps them automatically.
 
 ### "[Unknown album]" in library
 
-**Likely cause**: A previous import created entries from untagged files (e.g. from a failed test run). The orphan files end up in `/media/wdblue/share/Music/__/`.
+**Likely cause**: A previous import created entries from untagged files (e.g. from a failed test run). The orphan files end up in `/path/to/music/library/__/`.
 
 **Fix**:
 ```bash
@@ -147,12 +156,12 @@ These files cannot be processed by the script and need manual inspection.
 
 | Setting | Value |
 |---|---|
-| **Music directory** | `/media/wdblue/share/Music/` |
+| **Music directory** | `/path/to/music/library/` |
 | **Database** | `~/beets/library.db` |
 | **Import mode** | `move: yes` (files are moved, not copied) |
 | **Plugins** | `musicbrainz` (autotagging) |
 | **MusicBrainz search** | Limit: 5, no ASCII query conversion |
-| **Staging area** | `/media/wdblue/share/import/` |
+| **Staging area** | `/path/to/import/` |
 
 ### Useful commands
 
@@ -171,8 +180,8 @@ beet list -a '' ''          # Orphaned albums (empty artist/album)
 ## Adding a new album
 
 ```
-cp -r /path/to/Album /media/wdblue/share/import/
-cd /media/wdblue/share/import/
+cp -r /path/to/Album /path/to/import/
+cd /path/to/import/
 ./preprocess.sh
 ./import.sh
 ./clean.sh
