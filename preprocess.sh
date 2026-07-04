@@ -35,9 +35,17 @@ blue()   { echo -e "\033[34m$1\033[0m"; }
 clean_folder_name() {
   local dirbase
   dirbase="$(basename "$1")"
-  # Strip trailing [...][...] quality tags
-  local cleaned
-  cleaned="$(echo "$dirbase" | sed -E 's/\s*\[[^]]*\](\.?)$//g' | sed -E 's/[[:space:]]+$//')"
+  local cleaned="$dirbase"
+  # Strip trailing period if present (common artifact)
+  cleaned="${cleaned%.}"
+  # Repeatedly strip trailing [...][...] quality tags (e.g. [FLAC], [24B-48kHz])
+  while [[ "$cleaned" =~ \[[^]]*\]$ ]]; do
+    # Remove the last "[...]" tag and any space before it
+    cleaned="${cleaned%\[*}"
+    cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
+  done
+  # Trim trailing whitespace
+  cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
   if [[ "$cleaned" != "$dirbase" ]]; then
     echo "$(dirname "$1")/$cleaned"
   else
