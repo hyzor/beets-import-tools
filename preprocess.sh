@@ -259,13 +259,15 @@ process_folder() {
     local new_folder
     new_folder="$(clean_folder_name "$folder")"
     if [[ "$new_folder" != "$folder" ]]; then
-      echo "  Renaming: $(basename "$folder") → $(basename "$new_folder")"
+      echo "  📁  Renamed: $(basename "$folder") → $(basename "$new_folder")"
       if ! $DRY_RUN; then
         mv "$folder" "$new_folder"
       fi
+      TOTAL_FIXED=$((TOTAL_FIXED + 1))
+    else
+      green "  ✅  No fixes needed"
+      TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
     fi
-    green "  ✅  No fixes needed"
-    TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
   fi
 }
 
