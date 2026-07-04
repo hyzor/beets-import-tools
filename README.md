@@ -15,14 +15,14 @@ Clone or copy these scripts into your beets import staging directory, then confi
 
 | Script | Purpose |
 |---|---|
-| `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames |
+| `import.sh` | **Main entry point** — runs `preprocess.sh` first, then `beet import .` |
+| `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames, cleans folder names |
 | `embed-lrc.sh` | Embed existing `.lrc` sidecar lyrics into audio file tags for beets awareness |
-| `import.sh` | Runs `beet import .` — standard MusicBrainz-autotagged import |
 | `clean.sh` | Deletes everything except scripts and `README.md` — run after successful import |
 
 ---
 
-## Full workflow
+## Workflow
 
 ```bash
 cd /path/to/import/
@@ -30,23 +30,14 @@ cd /path/to/import/
 # 1. Place album folder(s) here, e.g.:
 #    Artist - Album Name/
 
-# 2. Preprocess (optional but recommended — catches common issues)
-./preprocess.sh
-
-# 3. Import (auto-tags via MusicBrainz)
+# 2. Import (runs preprocessor + beets in one step)
 ./import.sh
 
-# 4. Clean up
+# 3. Clean up
 ./clean.sh
 ```
 
-### Quick import (when you know files are clean)
-
-```bash
-cd /path/to/import/
-./import.sh
-./clean.sh
-```
+That's it. `import.sh` always runs the preprocessor first — no way to skip it.
 
 ### Import without MusicBrainz (use filenames as tags)
 
@@ -78,7 +69,7 @@ Artist Name - Album Title/
 
 ## preprocess.sh — detailed
 
-This script is the main defense against failed imports. It scans every album folder and:
+This script is always run as part of `./import.sh`. You can also run it standalone for a dry-run or to check a specific folder. It scans every album folder and:
 
 ### What it checks
 
@@ -269,10 +260,11 @@ This preserves the `[MM:SS.xx]` timestamps and then runs `beet update` to sync t
 
 With `auto: true` (default), the plugin automatically fetches and embeds lyrics for every track during `beet import`. No extra steps needed — just run your normal import workflow and lyrics get added alongside MusicBrainz metadata.
 
+## Adding a new album
+
 ```
 cp -r /path/to/Album /path/to/import/
 cd /path/to/import/
-./preprocess.sh
-./import.sh
-./clean.sh
+./import.sh      # preprocesses + imports
+./clean.sh       # tidies up
 ```
