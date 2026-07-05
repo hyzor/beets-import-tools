@@ -6,3 +6,6 @@
 !/import.sh
 !/clean.sh
 !/.gitignore
+
+# Album staging directory
+/albums/

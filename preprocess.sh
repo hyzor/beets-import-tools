@@ -291,30 +291,33 @@ if $DRY_RUN; then
   echo ""
 fi
 
+ALBUMS_DIR="$IMPORT_DIR/albums"
+
 if [[ $# -gt 0 ]]; then
-  # Process specific folder
-  target="$IMPORT_DIR/$1"
-  if [ -d "$target" ]; then
-    process_folder "$target"
+  # Process specific folder (check albums/ first, then root for backwards compat)
+  if [ -d "$ALBUMS_DIR/$1" ]; then
+    target="$ALBUMS_DIR/$1"
+  elif [ -d "$IMPORT_DIR/$1" ]; then
+    target="$IMPORT_DIR/$1"
   else
     red "Folder not found: $1"
+    red "  (looked in albums/ and the import root)"
     exit 1
   fi
+  process_folder "$target"
 else
-  # Scan all folders in import directory
+  # Scan all album folders in albums/
   shopt -s nullglob
-  folders=("$IMPORT_DIR"/*/)
+  folders=("$ALBUMS_DIR"/*/)
   shopt -u nullglob
 
   if [[ ${#folders[@]} -eq 0 ]]; then
-    yellow "  No folders found in $IMPORT_DIR"
+    yellow "  No album folders found in albums/"
+    echo "  Place album folders in: $ALBUMS_DIR"
     exit 0
   fi
 
   for folder in "${folders[@]}"; do
-    fb="$(basename "$folder")"
-    # Skip hidden dirs and our own scripts
-    [[ "$fb" == scripts ]] && continue
     process_folder "$folder"
   done
 fi
@@ -336,5 +339,5 @@ fi
 
 echo ""
 if [[ $TOTAL_FIXED -gt 0 ]] && ! $DRY_RUN; then
-  green "  Ready! Now run:  beet import -A $IMPORT_DIR/*/"
+  green "  Ready! Now run:  beet import -A $ALBUMS_DIR/*/"
 fi

@@ -1,6 +1,20 @@
 # 🎵 Beets Import Toolkit
 
-This is a set of scripts for preprocessing and importing music into a [beets](https://beets.io/) library. Place album folders in the staging directory, run the preprocessor to fix common issues, then import into beets.
+This is a set of scripts for preprocessing and importing music into a [beets](https://beets.io/) library. Place album folders in `albums/`, run `./import.sh`, and everything is handled automatically.
+
+## Structure
+
+```
+/path/to/import/
+├── albums/             ← Drop album folders here
+│   ├── Artist - Album/
+│   └── ...
+├── import.sh           ← Main entry point (preprocess + import)
+├── preprocess.sh       ← Pre-flight check & fix (runs automatically)
+├── embed-lrc.sh        ← Embed .lrc lyrics into file tags
+├── clean.sh            ← Remove processed album folders
+└── README.md
+```
 
 ## Setup
 
@@ -27,13 +41,13 @@ Clone or copy these scripts into your beets import staging directory, then confi
 ```bash
 cd /path/to/import/
 
-# 1. Place album folder(s) here, e.g.:
-#    Artist - Album Name/
+# Place album folder(s) in albums/:
+cp -r /path/to/Album /path/to/import/albums/
 
-# 2. Import (runs preprocessor + beets in one step)
+# Import (runs preprocessor + beets in one step)
 ./import.sh
 
-# 3. Clean up
+# Clean up
 ./clean.sh
 ```
 
@@ -89,9 +103,9 @@ This script is always run as part of `./import.sh`. You can also run it standalo
 ### Usage
 
 ```bash
-./preprocess.sh                    # process all folders
+./preprocess.sh                    # process all folders in albums/
 ./preprocess.sh --dry-run          # preview only, no changes
-./preprocess.sh "Album Folder/"    # process specific folder
+./preprocess.sh "Album Folder/"    # process specific folder in albums/
 ./preprocess.sh --dry-run "Album Folder/"
 ```
 
@@ -263,8 +277,8 @@ With `auto: true` (default), the plugin automatically fetches and embeds lyrics 
 ## Adding a new album
 
 ```
-cp -r /path/to/Album /path/to/import/
+cp -r /path/to/Album /path/to/import/albums/
 cd /path/to/import/
-./import.sh      # preprocesses + imports
-./clean.sh       # tidies up
+./import.sh      # preprocesses + imports from albums/
+./clean.sh       # cleans albums/ folder
 ```
