@@ -5,6 +5,8 @@
 !/embed-lrc.sh
 !/import.sh
 !/clean.sh
+!/soulseek-import.sh
+!/quality-guard.sh
 !/.gitignore
 
 # Album staging directory

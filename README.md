@@ -33,6 +33,8 @@ Clone or copy these scripts into your beets import staging directory, then confi
 | `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames, cleans folder names |
 | `embed-lrc.sh` | Embed existing `.lrc` sidecar lyrics into audio file tags for beets awareness |
 | `clean.sh` | Deletes everything except scripts and `README.md` — run after successful import |
+| `soulseek-import.sh` | Import albums from the slskd downloads dir via **hardlinks** — sources kept for seeding |
+| `quality-guard.sh` | Lossless-only gate: rejects lossy files and lossy→FLAC transcodes |
 
 ---
 
@@ -52,6 +54,31 @@ cp -r /path/to/Album /path/to/import/albums/
 ```
 
 That's it. `import.sh` always runs the preprocessor first — no way to skip it.
+
+### Soulseek downloads (P2P)
+
+```bash
+# Import everything queued in the slskd downloads dir (hardlinks, sources kept):
+/media/wdblue/share/import/soulseek-import.sh
+
+# Single album:
+/media/wdblue/share/import/soulseek-import.sh "Album Dir"
+
+# Bypass the quality guard (e.g. knowingly importing an MP3):
+/media/wdblue/share/import/soulseek-import.sh --force
+```
+
+Differences from the normal flow:
+
+- Uses `beet import -L` (**hardlinks**), so downloads and library share the same
+  files — no disk duplication, and the downloads dir keeps seeding on Soulseek.
+- Runs `quality-guard.sh` before importing: any album containing lossy files
+  (MP3/AAC/OGG/...) or lossless-looking files transcoded from a lossy source
+  (average bitrate < 500 kbps) is **skipped**, not deleted — sources stay in
+  the downloads dir. Adjust thresholds at the top of `quality-guard.sh`
+  (`MIN_AVG_BITRATE`, `MIN_SAMPLE_RATE`, `MIN_BIT_DEPTH`).
+- Does NOT run the preprocessor — use the `albums/` staging flow if a specific
+  album needs the mislabeled-FLAC fix.
 
 ### Import without MusicBrainz (use filenames as tags)
 
