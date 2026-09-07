@@ -54,6 +54,33 @@ _mb_retryable_failure() {
   grep -Eiq "too many [0-9]+ error responses|exceeding the allowable rate limit|Max retries exceeded|timed out|ConnectionError|Connection refused" "$1"
 }
 
+# Filters Python tracebacks out of the console stream. When a MusicBrainz
+# search throws, beets logs the full urllib3/requests exception chain (frames,
+# source lines, carets) to stderr before continuing to its prompt — useful in
+# the log file, noise on the terminal. State machine: on "Traceback..." start
+# suppressing until a non-blank, non-exception, non-indented line ends the
+# block. ANSI codes are stripped for matching but the original line passes
+# through. Full output is still captured raw in mb-import.log (tee runs
+# before this filter).
+_mb_traceback_filter() {
+  awk '
+    BEGIN { in_tb = 0 }
+    {
+      s = $0
+      gsub(/\033\[[0-9;]*[mK]/, "", s)
+      if (in_tb) {
+        if (s == "" || s ~ /^[[:space:]]/) next
+        if (s ~ /^During handling of the above exception, another exception occurred:/) next
+        if (s ~ /^The above exception was the direct cause of the following exception:/) next
+        if (s ~ /^(.*\.)?[A-Za-z_][A-Za-z0-9_.]*(Error|Exception|[Tt]imeout)(\(|:)/) next
+        in_tb = 0
+      }
+      if (s ~ /^Traceback \(most recent call last\):/) { in_tb = 1; next }
+      print
+      fflush()
+    }'
+}
+
 beet_import_with_mb_retry() {
   local folder="$1"
   shift
@@ -82,7 +109,7 @@ beet_import_with_mb_retry() {
     # reads stdin (the terminal) directly.
     # Read PIPESTATUS immediately in both branches so the rc does not depend
     # on whether the caller enabled `pipefail`.
-    if PYTHONUNBUFFERED=1 beet "${verbosity[@]}" import "$@" "$folder" 2>&1 | tee -a "$runlog"; then
+    if PYTHONUNBUFFERED=1 beet "${verbosity[@]}" import "$@" "$folder" 2>&1 | tee -a "$runlog" | _mb_traceback_filter; then
       rc=${PIPESTATUS[0]}
     else
       rc=${PIPESTATUS[0]}

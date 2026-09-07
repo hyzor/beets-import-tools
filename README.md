@@ -185,6 +185,7 @@ If `beet import` fails with `Error in 'MusicBrainz.candidates': ... Max retries 
 - When an import fails **and** the output shows a retryable signature (503/429 rate limiting, `Max retries exceeded`, timeouts, connection errors), the script waits for MB to recover and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
 - A run that exits 0 (e.g. you skipped the album) is **never** re-run — no duplicate prompts.
 - beets runs unbuffered (`PYTHONUNBUFFERED=1`), so its output streams live instead of sitting in the pipe buffer.
+- Python tracebacks beets dumps on MusicBrainz errors are filtered from the console (they land in full in `mb-import.log`) — you see the one-line error and the beets prompt, not a wall of stack frames.
 - After retries are exhausted the folder is left in place and `import.sh` exits non-zero with a summary; re-running it later skips folders that already imported (beets moves files out, so their shells contain no audio and are skipped automatically).
 
 Full transcripts of every import attempt land in `mb-import.log` (in the import dir; `soulseek-import.sh` keeps its own `soulseek-import.log` instead).
