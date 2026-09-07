@@ -16,15 +16,19 @@
 #     (MP3/AAC/...) or lossless-looking files transcoded from a lossy source.
 #     Sources are kept — skipped albums are just left in downloads/.
 #   - Interactive: you pick the MusicBrainz match per album (like import.sh).
+#   - MusicBrainz rate limiting (HTTP 503/429) is handled automatically:
+#     mb-import-lib.sh waits out the rate window and retries the album.
 #   - Preprocess (mislabeled FLAC fix) is NOT run — use import.sh + albums/
 #     staging if you need that for a specific album.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/quality-guard.sh"
+source "$SCRIPT_DIR/mb-import-lib.sh"
 
 DOWNLOADS="/media/wdblue/share/soulseek/downloads"
 LOGFILE="/media/wdblue/share/import/soulseek-import.log"
+mb_logfile="$LOGFILE"
 
 FORCE=false
 case "${1:-}" in
@@ -46,9 +50,8 @@ import_album() {
     return
   fi
 
-  if ! beet import -L "$dir" 2>&1 | tee -a "$LOGFILE"; then
-    echo "  ⚠  import exited non-zero — see $LOGFILE"
-  fi
+  # Rate-limit-aware import (retries with backoff on MusicBrainz 503/429).
+  beet_import_with_mb_retry "$dir" -L || true
 }
 
 if [[ $# -gt 0 ]]; then

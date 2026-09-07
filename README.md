@@ -13,6 +13,8 @@ This is a set of scripts for preprocessing and importing music into a [beets](ht
 ├── preprocess.sh       ← Pre-flight check & fix (runs automatically)
 ├── embed-lrc.sh        ← Embed .lrc lyrics into file tags
 ├── clean.sh            ← Remove processed album folders
+├── quality-guard.sh    ← Lossless-only gate (sourced by soulseek-import.sh)
+├── mb-import-lib.sh    ← MusicBrainz rate-limit retry (sourced by import scripts)
 └── README.md
 ```
 
@@ -29,12 +31,13 @@ Clone or copy these scripts into your beets import staging directory, then confi
 
 | Script | Purpose |
 |---|---|
-| `import.sh` | **Main entry point** — runs `preprocess.sh` first, then `beet import .` |
+| `import.sh` | **Main entry point** — runs `preprocess.sh` first, then imports each folder in `albums/` one at a time |
 | `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames, cleans folder names |
 | `embed-lrc.sh` | Embed existing `.lrc` sidecar lyrics into audio file tags for beets awareness |
 | `clean.sh` | Deletes everything except scripts and `README.md` — run after successful import |
 | `soulseek-import.sh` | Import albums from the slskd downloads dir via **hardlinks** — sources kept for seeding |
 | `quality-guard.sh` | Lossless-only gate: rejects lossy files and lossy→FLAC transcodes |
+| `mb-import-lib.sh` | MusicBrainz rate-limit handling — sourced, not run directly. Retries throttled imports after a cooldown (see "Common issues") |
 
 ---
 
@@ -171,6 +174,24 @@ If beets says "This album is already in the library!", it found an existing matc
 - `S` — Skip new (same as Keep all, just skip the new copy)
 - `R` — Remove old and replace with new
 - `M` — Merge (add new tracks to existing album)
+
+### MusicBrainz rate limiting (HTTP 503 / "too many 503 error responses")
+
+If `beet import` dies with `Error in 'MusicBrainz.candidates': ... Max retries exceeded ... too many 503 error responses`, MusicBrainz throttled the request. MB allows ~1 request/sec per IP and answers everything with 503 until the rate drops again — and since 2025-2026 it also sheds load from AI-scraper pressure, so compliant clients hit this occasionally too. Beets' built-in retries (6 × short backoff, no `Retry-After` honoring) are not enough to ride it out.
+
+`import.sh` and `soulseek-import.sh` handle this automatically via `mb-import-lib.sh`:
+- Each album folder is imported in its own `beet import` process, so a throttled album never blocks the rest of the batch.
+- When an import fails **and** the output shows the rate-limit signature, the script prints a notice, waits for the rate window to clear, and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
+- A run that exits 0 (e.g. you skipped the album) is **never** re-run — no duplicate prompts.
+- After retries are exhausted the folder is left in place and `import.sh` exits non-zero with a summary; re-running it later skips folders that already imported (beets moves files out, so their shells contain no audio and are skipped automatically).
+
+Full transcripts of every import attempt land in `mb-import.log` (in the import dir; `soulseek-import.sh` keeps its own `soulseek-import.log` instead).
+
+Tuning (env vars, defaults shown):
+```bash
+MB_MAX_ATTEMPTS=3     # total import attempts per folder
+MB_RETRY_DELAY=60     # base wait in seconds (delay = base × attempt number)
+```
 
 ### WARNING: Unrecognized file
 
