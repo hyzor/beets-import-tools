@@ -175,14 +175,16 @@ If beets says "This album is already in the library!", it found an existing matc
 - `R` — Remove old and replace with new
 - `M` — Merge (add new tracks to existing album)
 
-### MusicBrainz rate limiting (HTTP 503 / "too many 503 error responses")
+### MusicBrainz unresponsive or rate-limited (503s, timeouts, hangs)
 
-If `beet import` dies with `Error in 'MusicBrainz.candidates': ... Max retries exceeded ... too many 503 error responses`, MusicBrainz throttled the request. MB allows ~1 request/sec per IP and answers everything with 503 until the rate drops again — and since 2025-2026 it also sheds load from AI-scraper pressure, so compliant clients hit this occasionally too. Beets' built-in retries (6 × short backoff, no `Retry-After` honoring) are not enough to ride it out.
+If `beet import` fails with `Error in 'MusicBrainz.candidates': ... Max retries exceeded ... too many 503 error responses`, MusicBrainz throttled the request. MB allows ~1 request/sec per IP and answers everything with 503 until the rate drops again. Since 2025-2026 it also sheds load from AI-scraper pressure, so API responses can take 5-30+ s or time out entirely (beets' request timeout is 10 s) even for compliant clients — sometimes the API hangs while the website stays fast. Beets' built-in retries (6 × short backoff, no `Retry-After` honoring) are not enough to ride any of this out.
 
-`import.sh` and `soulseek-import.sh` handle this automatically via `mb-import-lib.sh`:
+`import.sh` and `soulseek-import.sh` handle it automatically via `mb-import-lib.sh`:
 - Each album folder is imported in its own `beet import` process, so a throttled album never blocks the rest of the batch.
-- When an import fails **and** the output shows the rate-limit signature, the script prints a notice, waits for the rate window to clear, and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
+- The wrapper announces every attempt, so a slow MB lookup never looks like a frozen script. Retry attempts run `beet -v` to stream live MusicBrainz request logs.
+- When an import fails **and** the output shows a retryable signature (503/429 rate limiting, `Max retries exceeded`, timeouts, connection errors), the script waits for MB to recover and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
 - A run that exits 0 (e.g. you skipped the album) is **never** re-run — no duplicate prompts.
+- beets runs unbuffered (`PYTHONUNBUFFERED=1`), so its output streams live instead of sitting in the pipe buffer.
 - After retries are exhausted the folder is left in place and `import.sh` exits non-zero with a summary; re-running it later skips folders that already imported (beets moves files out, so their shells contain no audio and are skipped automatically).
 
 Full transcripts of every import attempt land in `mb-import.log` (in the import dir; `soulseek-import.sh` keeps its own `soulseek-import.log` instead).

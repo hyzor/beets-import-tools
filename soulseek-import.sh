@@ -16,8 +16,8 @@
 #     (MP3/AAC/...) or lossless-looking files transcoded from a lossy source.
 #     Sources are kept — skipped albums are just left in downloads/.
 #   - Interactive: you pick the MusicBrainz match per album (like import.sh).
-#   - MusicBrainz rate limiting (HTTP 503/429) is handled automatically:
-#     mb-import-lib.sh waits out the rate window and retries the album.
+#   - MusicBrainz rate limiting / unresponsiveness (HTTP 503/429, timeouts)
+#     is handled automatically: mb-import-lib.sh waits it out and retries.
 #   - Preprocess (mislabeled FLAC fix) is NOT run — use import.sh + albums/
 #     staging if you need that for a specific album.
 set -euo pipefail
