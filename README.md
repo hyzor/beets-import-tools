@@ -13,6 +13,8 @@ This is a set of scripts for preprocessing and importing music into a [beets](ht
 ├── preprocess.sh       ← Pre-flight check & fix (runs automatically)
 ├── embed-lrc.sh        ← Embed .lrc lyrics into file tags
 ├── clean.sh            ← Remove processed album folders
+├── quality-guard.sh    ← Lossless-only gate (sourced by soulseek-import.sh)
+├── mb-import-lib.sh    ← MusicBrainz rate-limit retry (sourced by import scripts)
 └── README.md
 ```
 
@@ -29,12 +31,13 @@ Clone or copy these scripts into your beets import staging directory, then confi
 
 | Script | Purpose |
 |---|---|
-| `import.sh` | **Main entry point** — runs `preprocess.sh` first, then `beet import .` |
+| `import.sh` | **Main entry point** — runs `preprocess.sh` first, then imports each folder in `albums/` one at a time |
 | `preprocess.sh` | Pre-flight check & fix — detects mislabeled files, re-wraps them, tags from filenames, cleans folder names |
 | `embed-lrc.sh` | Embed existing `.lrc` sidecar lyrics into audio file tags for beets awareness |
 | `clean.sh` | Deletes everything except scripts and `README.md` — run after successful import |
 | `soulseek-import.sh` | Import albums from the slskd downloads dir via **hardlinks** — sources kept for seeding |
 | `quality-guard.sh` | Lossless-only gate: rejects lossy files and lossy→FLAC transcodes |
+| `mb-import-lib.sh` | MusicBrainz rate-limit handling — sourced, not run directly. Retries throttled imports after a cooldown (see "Common issues") |
 
 ---
 
@@ -171,6 +174,27 @@ If beets says "This album is already in the library!", it found an existing matc
 - `S` — Skip new (same as Keep all, just skip the new copy)
 - `R` — Remove old and replace with new
 - `M` — Merge (add new tracks to existing album)
+
+### MusicBrainz unresponsive or rate-limited (503s, timeouts, hangs)
+
+If `beet import` fails with `Error in 'MusicBrainz.candidates': ... Max retries exceeded ... too many 503 error responses`, MusicBrainz throttled the request. MB allows ~1 request/sec per IP and answers everything with 503 until the rate drops again. Since 2025-2026 it also sheds load from AI-scraper pressure, so API responses can take 5-30+ s or time out entirely (beets' request timeout is 10 s) even for compliant clients — sometimes the API hangs while the website stays fast. Beets' built-in retries (6 × short backoff, no `Retry-After` honoring) are not enough to ride any of this out.
+
+`import.sh` and `soulseek-import.sh` handle it automatically via `mb-import-lib.sh`:
+- Each album folder is imported in its own `beet import` process, so a throttled album never blocks the rest of the batch.
+- The wrapper announces every attempt, so a slow MB lookup never looks like a frozen script. Retry attempts run `beet -v` to stream live MusicBrainz request logs.
+- When an import fails **and** the output shows a retryable signature (503/429 rate limiting, `Max retries exceeded`, timeouts, connection errors), the script waits for MB to recover and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
+- A run that exits 0 (e.g. you skipped the album) is **never** re-run — no duplicate prompts.
+- beets runs unbuffered (`PYTHONUNBUFFERED=1`), so its output streams live instead of sitting in the pipe buffer.
+- Python tracebacks beets dumps on MusicBrainz errors are filtered from the console (they land in full in `mb-import.log`) — you see the one-line error and the beets prompt, not a wall of stack frames.
+- After retries are exhausted the folder is left in place and `import.sh` exits non-zero with a summary; re-running it later skips folders that already imported (beets moves files out, so their shells contain no audio and are skipped automatically).
+
+Full transcripts of every import attempt land in `mb-import.log` (in the import dir; `soulseek-import.sh` keeps its own `soulseek-import.log` instead).
+
+Tuning (env vars, defaults shown):
+```bash
+MB_MAX_ATTEMPTS=3     # total import attempts per folder
+MB_RETRY_DELAY=60     # base wait in seconds (delay = base × attempt number)
+```
 
 ### WARNING: Unrecognized file
 
