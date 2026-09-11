@@ -15,6 +15,8 @@ This is a set of scripts for preprocessing and importing music into a [beets](ht
 ├── clean.sh            ← Remove processed album folders
 ├── quality-guard.sh    ← Lossless-only gate (sourced by soulseek-import.sh)
 ├── mb-import-lib.sh    ← MusicBrainz rate-limit retry (sourced by import scripts)
+├── mb-console-filter.py ← Console traceback filter + transcript log (piped)
+├── retag.sh            ← Re-tag library albums that never got MusicBrainz tags
 └── README.md
 ```
 
@@ -38,6 +40,8 @@ Clone or copy these scripts into your beets import staging directory, then confi
 | `soulseek-import.sh` | Import albums from the slskd downloads dir via **hardlinks** — sources kept for seeding |
 | `quality-guard.sh` | Lossless-only gate: rejects lossy files and lossy→FLAC transcodes |
 | `mb-import-lib.sh` | MusicBrainz rate-limit handling — sourced, not run directly. Retries throttled imports after a cooldown (see "Common issues") |
+| `mb-console-filter.py` | Byte-stream console filter — hides beets' Python tracebacks and writes the raw transcript to the per-attempt log. Piped by `mb-import-lib.sh`; not run directly |
+| `retag.sh` | Find and re-tag **library** albums that never got MusicBrainz tags (imported as-is / skipped). Lists them, searches MusicBrainz, applies an exact release ID with `-S`. See "Re-tagging albums that were never tagged" |
 
 ---
 
@@ -184,8 +188,9 @@ If `beet import` fails with `Error in 'MusicBrainz.candidates': ... Max retries 
 - The wrapper announces every attempt, so a slow MB lookup never looks like a frozen script. Retry attempts run `beet -v` to stream live MusicBrainz request logs.
 - When an import fails **and** the output shows a retryable signature (503/429 rate limiting, `Max retries exceeded`, timeouts, connection errors), the script waits for MB to recover and retries the same folder (up to 3 attempts: waits of 60 s, then 120 s).
 - A run that exits 0 (e.g. you skipped the album) is **never** re-run — no duplicate prompts.
-- beets runs unbuffered (`PYTHONUNBUFFERED=1`), so its output streams live instead of sitting in the pipe buffer.
+- beets runs unbuffered (`PYTHONUNBUFFERED=1`) and its output is piped through `mb-console-filter.py`, which writes as bytes arrive and appends the raw transcript to the per-attempt log. The filter must stay byte-stream: a line-oriented stage (`tee | awk`, `grep`, `sed`) holds back a line until it sees a newline, and beets' wrapped prompt ends without one — so the last line of the choice list (`Enter search, enter Id, aBort?`) would never appear while you sit at the prompt, making the prompt look truncated after the comma.
 - Python tracebacks beets dumps on MusicBrainz errors are filtered from the console (they land in full in `mb-import.log`) — you see the one-line error and the beets prompt, not a wall of stack frames.
+- The interactive prompt is a real prompt, **but on beets 2.14.x two of its options are broken**: `enter Id` and `Enter search` do the lookup and then discard the result (upstream issue #7000 — see below), so you get the same candidate list back. Use `-S` from the shell instead.
 - After retries are exhausted the folder is left in place and `import.sh` exits non-zero with a summary; re-running it later skips folders that already imported (beets moves files out, so their shells contain no audio and are skipped automatically).
 
 Full transcripts of every import attempt land in `mb-import.log` (in the import dir; `soulseek-import.sh` keeps its own `soulseek-import.log` instead).
@@ -195,6 +200,57 @@ Tuning (env vars, defaults shown):
 MB_MAX_ATTEMPTS=3     # total import attempts per folder
 MB_RETRY_DELAY=60     # base wait in seconds (delay = base × attempt number)
 ```
+
+### When the MusicBrainz *search* is down but direct lookups still work
+
+MusicBrainz' own forum has tracked search-endpoint trouble (the `/ws/2/release?query=…` path that autotagging uses) separately from direct ID lookups. Measured from this host on 2026-09-11: the search endpoint answered 503 for 6 of 10 probes while a direct `/ws/2/release/<mbid>` lookup answered 200 for 6 of 8. A failed search therefore does **not** mean the album can't be imported right now.
+
+⚠ **Do not use the prompt's `enter Id` / `Enter search` options on beets 2.14.x.** They are broken in that version: the lookup runs and succeeds, then its result is thrown away and the same candidate list is displayed again (upstream [issue #7000](https://github.com/beetbox/beets/issues/7000), a regression from the typing refactor in commit `d143e2cb`; present in 2.14.0, absent in 2.13.1). Pasting your ID there loops forever.
+
+Instead pass the ID on the command line — `-S` / `--search-id` goes through the *initial* lookup path, which is not affected (extra flags go *after* the folder):
+
+```bash
+cd /media/wdblue/share/import
+source ./mb-import-lib.sh
+beet_import_with_mb_retry "albums/Chimaira/" -S <release-id>
+```
+
+The release ID is the `mbid` in the release page URL: `musicbrainz.org/release/<mbid>`. (`-S` restricts matching to that release, so beets fetches it directly instead of running one search per track — fewer API calls to get throttled on.)
+
+Note on the prompt output: since beets 2.14 the no-match list includes `Rescan directory`, which pushes it past beets' 72-column wrap, so the choice list is printed on **two lines** and only the default option is bracketed (`[S]kip`, then `Use as-is, as Tracks, …`). A line ending in a comma is a wrap, not truncated output.
+
+### Re-tagging albums that were never tagged (`retag.sh`)
+
+Albums imported **as-is** (or whose lookup was skipped) sit in the library with no MusicBrainz data — no year/label/genre, no MB track IDs — even when the files themselves already carry decent tags. Their signature in the database is an empty `mb_albumid`, which is exactly what `retag.sh` lists:
+
+```
+$ ./retag.sh
+    #  Album                                      Artist                   Year   Trk  Folder
+    1  Lead Sails Paper Anchor                    Atreyu                   2007   11   /media/wdblue/share/Music/Atreyu/Lead Sails Paper Anchor
+   ...
+   14  Slipknot                                   Slipknot                 1999   15   /media/wdblue/share/Music/Slipknot/Slipknot
+
+  14 album(s) without a MusicBrainz id (of 200 albums in the library).
+```
+
+| Command | What it does |
+|---|---|
+| `./retag.sh` | list the untagged albums (read-only) |
+| `./retag.sh --find-id "Artist - Album"` | query the MusicBrainz API and print candidate release IDs (track count, country, date, format) with ready-to-run commands — plus the website search URL for when the API is being shed |
+| `./retag.sh --pick 4` | re-tag album #4 from the listing via a normal MusicBrainz search |
+| `./retag.sh --pick 4 --id <release-mbid>` | re-tag album #4 against that exact release (`beet import -S`) — the route that still works while MB search is throttled, and the only route on beets 2.14.x |
+| `./retag.sh --all [--limit N]` | walk every listed album, one at a time |
+| `--in-place` | write tags without renaming or moving anything (`beet import -M -C`) — Navidrome keeps its album/track identity, so **stars, play counts and scrobbles survive**; filenames stay untidy |
+| `--dry-run` / `--yes` | print the beet command instead of running it / skip the confirmation |
+
+**What this does to your files, and to Navidrome.** Tags are rewritten in place — same file, same audio stream, no re-encoding. Unless `--in-place` is given, beets then re-formats the paths (this setup has `import.move: yes`), renaming files to the MusicBrainz tracklist and possibly the album folder as well. Navidrome (0.63.2, mounted read-only at `/music`) notices the change within seconds via its file watcher, but **renamed paths make it index the album as a new one**: the previous album row stays behind as "missing" (a full rescan does not purge it) and its stars, play counts and scrobbles stay attached to the old ids, so they effectively reset for that album. A change that leaves paths alone is migrated cleanly instead — retagging with `--in-place` keeps the star and the play counts.
+
+It imports the album's **library folder**, not a staging copy, so the files already in place get the tags; `mb-import-lib.sh` provides the MB retry handling and console filter, with transcripts in `retag.log`. Tags are rewritten in place, and if the new metadata yields a different path the folder is moved (this setup has `import.move: yes`). If beets asks whether to update the album because it is already in the library, answer **R** (Remove old and replace with new). Re-tagged albums disappear from the next listing — the list is derived from `mb_albumid`, so it doubles as your progress report.
+
+Notes:
+- Selection is literal (`--album "Chimaira"`), not a beets query: album names here contain `[..]`/`(..)`, which beets' regex queries read as character classes.
+- Files with no album tag at all (loose singles) are counted separately and pointed at `beet import -s` instead of being silently included.
+- On beets 2.14.x do not try to fix a wrong candidate list with the prompt's `e`/`i` options — they discard the lookup result (upstream #7000). Use `--id`.
 
 ### WARNING: Unrecognized file
 
