@@ -8,6 +8,8 @@
 !/soulseek-import.sh
 !/quality-guard.sh
 !/mb-import-lib.sh
+!/mb-console-filter.py
+!/retag.sh
 !/.gitignore
 
 # Album staging directory
