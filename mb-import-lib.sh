@@ -19,8 +19,8 @@
 # Visibility: beets prints nothing during autotag lookups (they are
 # debug-level), so this wrapper announces each attempt up front and runs
 # retries with `beet -v` to stream live MusicBrainz request logs. beets is
-# also run with PYTHONUNBUFFERED so its output isn't block-buffered by the
-# tee pipe.
+# also run with PYTHONUNBUFFERED so its output isn't block-buffered in the
+# filter pipe.
 #
 # Configuration (plain env vars, set before sourcing or before calling):
 #   MB_MAX_ATTEMPTS  (default 3)   total import attempts per folder
@@ -54,32 +54,17 @@ _mb_retryable_failure() {
   grep -Eiq "too many [0-9]+ error responses|exceeding the allowable rate limit|Max retries exceeded|timed out|ConnectionError|Connection refused" "$1"
 }
 
-# Filters Python tracebacks out of the console stream. When a MusicBrainz
-# search throws, beets logs the full urllib3/requests exception chain (frames,
-# source lines, carets) to stderr before continuing to its prompt — useful in
-# the log file, noise on the terminal. State machine: on "Traceback..." start
-# suppressing until a non-blank, non-exception, non-indented line ends the
-# block. ANSI codes are stripped for matching but the original line passes
-# through. Full output is still captured raw in mb-import.log (tee runs
-# before this filter).
-_mb_traceback_filter() {
-  awk '
-    BEGIN { in_tb = 0 }
-    {
-      s = $0
-      gsub(/\033\[[0-9;]*[mK]/, "", s)
-      if (in_tb) {
-        if (s == "" || s ~ /^[[:space:]]/) next
-        if (s ~ /^During handling of the above exception, another exception occurred:/) next
-        if (s ~ /^The above exception was the direct cause of the following exception:/) next
-        if (s ~ /^(.*\.)?[A-Za-z_][A-Za-z0-9_.]*(Error|Exception|[Tt]imeout)(\(|:)/) next
-        in_tb = 0
-      }
-      if (s ~ /^Traceback \(most recent call last\):/) { in_tb = 1; next }
-      print
-      fflush()
-    }'
-}
+# Console filter + per-attempt transcript: mb-console-filter.py appends every
+# byte beets writes to the log file passed to it, and hides the Python
+# traceback dumps (full urllib3/requests exception chains, printed to stderr
+# before beets continues to its prompt) from the console.
+#
+# It has to be a byte-stream filter in Python rather than `tee | awk`: a
+# line-oriented tool can only emit a record once it has seen the terminating
+# newline, and beets' wrapped prompt ends without one — so its last line, the
+# one carrying "enter Id", would sit in the filter's buffer and never reach
+# the screen while beets waits at the prompt. See mb-console-filter.py.
+: "${mb_filter:="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mb-console-filter.py"}"
 
 beet_import_with_mb_retry() {
   local folder="$1"
@@ -103,13 +88,19 @@ beet_import_with_mb_retry() {
     local verbosity=()
     ((attempt > 1)) && verbosity=(-v)
 
-    # PYTHONUNBUFFERED keeps beets' output streaming through the tee — when
+    # PYTHONUNBUFFERED keeps beets' output streaming into the filter — when
     # stdout is a pipe Python otherwise block-buffers and nothing appears
     # until the buffer fills or the process exits. Prompts still work: beets
     # reads stdin (the terminal) directly.
+    #
+    # The filter writes the raw transcript to $runlog itself, so there is no
+    # tee in the pipeline any more (tee's own stdout is a pipe, which buffers
+    # the last, newline-less line of the wrapped prompt — that is how the
+    # "enter Id" option used to disappear while beets waited for input).
+    #
     # Read PIPESTATUS immediately in both branches so the rc does not depend
     # on whether the caller enabled `pipefail`.
-    if PYTHONUNBUFFERED=1 beet "${verbosity[@]}" import "$@" "$folder" 2>&1 | tee -a "$runlog" | _mb_traceback_filter; then
+    if PYTHONUNBUFFERED=1 beet "${verbosity[@]}" import "$@" "$folder" 2>&1 | python3 "$mb_filter" "$runlog"; then
       rc=${PIPESTATUS[0]}
     else
       rc=${PIPESTATUS[0]}
